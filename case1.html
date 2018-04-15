@@ -1,0 +1,132 @@
+<html>
+<script src="./three.js"></script>
+
+<body>
+
+</body>
+<script>
+    var SCREEN_WIDTH = 900;
+    var SCREEN_HEIGHT = 600;
+    var aspect = SCREEN_WIDTH / SCREEN_WIDTH;
+
+    var container, stats;
+    var camera, scene, renderer, mesh;
+    init();
+    function init() {
+
+        container = document.createElement('div');
+        // document.body.appendChild(container);
+
+        scene = new THREE.Scene();
+        scene.add(new THREE.AmbientLight(0xccc));
+        camera = new THREE.PerspectiveCamera(45, aspect, 1, 100);
+        camera.position.z = 8;
+        camera.position.x = 10;
+        camera.position.y = 7;
+        camera.lookAt(new THREE.Vector3(0, -0, 0));
+
+        var plane = new THREE.Mesh(new THREE.PlaneGeometry(8, 8, 16, 16), new THREE.MeshLambertMaterial({ color: 0x56772A }));
+        plane.rotation.x = -Math.PI / 2;
+        plane.position.y = -2;
+        plane.receiveShadow = true;
+        scene.add(plane);
+
+        var cube = new THREE.BoxGeometry(4, 2, 2);
+        // for (var i = 0; i < cube.faces.length; i += 2) {
+        //     var hex = 0x00ff00;
+        //     cube.faces[i].color.setHex(hex);
+        //     cube.faces[i + 1].color.setHex(hex);
+        // }
+
+        var materials = [];
+        THREE.ImageUtils.crossOrigin = 'anonymous';
+        var loader = new THREE.TextureLoader();
+        loader.crossOrigin = '';
+
+        for(var i = 0; i < 6; i++){
+            materials.push(new THREE.MeshLambertMaterial({
+                map: loader.load('http://pic43.nipic.com/20140715/11592338_153921902004_2.jpg',
+                {}, function(){
+                    renderer.render (scene, camera);
+                })
+            }))
+        }
+
+        var material = new THREE.MeshLambertMaterial({ vertexColors: THREE.FaceColors });
+        mesh = new THREE.Mesh(cube, material);
+        // mesh = new THREE.Mesh(cube, new THREE.MeshFaceMaterial(materials));
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+
+        var torusGeo = new THREE.TorusGeometry(0.6, 0.15, 16, 120);
+        var mesh2 = new THREE.Mesh(torusGeo, new THREE.MeshLambertMaterial({
+            color: 0xD7DF01
+        }));
+        mesh2.position.x = 1;
+        mesh2.position.y = -1;
+        mesh2.position.z = 1;
+        mesh2.rotateY(-Math.PI);
+
+        mesh2.castShadow = true;
+        mesh2.receiveShadow = true;
+        scene.add(mesh2);
+
+        // var light = new THREE.DirectionalLight();
+        // light.position.set(2, 5, 3);
+        // scene.add(light);
+        createTorus(1, -1, -1);
+        createTorus(-1, -1, 1);
+        createTorus(-1, -1, -1);
+        function createTorus(x, y, z) {
+            var mesh3 = new THREE.Mesh(torusGeo, new THREE.MeshLambertMaterial({
+                color: 0xD7DF01
+            }));
+            mesh3.position.x = x;
+            mesh3.position.y = y;
+            mesh3.position.z = z;
+            mesh3.rotateY(-Math.PI);
+            mesh3.castShadow = true;
+
+            mesh3.receiveShadow = true;
+            scene.add(mesh3);
+        }
+
+        var light = new THREE.SpotLight(0xffffff, 1, 200, Math.PI / 6, 25);
+        // var light = new THREE.DirectionalLight(0xffff00, 1);
+        light.position.set(-6, 10, 15);
+        var AmbientLight = new THREE.AmbientLight(0x4E5E65);        //环境光
+    scene.add(AmbientLight);
+        light.target = mesh;
+        light.castShadow = true;
+        light.shadowCameraNear = 2;
+        light.shadowCameraFar = 10;
+        light.shadowCameraFov = 50;
+        light.shadowCameraVisible = true;
+
+        light.shadowMapWidth = 1024;
+        light.shadowMapHeight = 1024;
+        light.shadowDarkness = 0.3;
+        scene.add(light);
+
+        // mesh.position.x = -10;
+        // mesh.rotateX(Math.PI / 3);
+        // mesh.rotation.y = -0.9;
+
+        // scene.add(mesh);
+        // THREE.PointLight(hex, intensity, distance)
+        renderer = new THREE.WebGLRenderer({
+            antialias: true
+        });
+        renderer.setClearColor(0x999999);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMapSoft = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+        document.body.appendChild(renderer.domElement);
+        renderer.render(scene, camera);
+    }
+</script>
+
+</html>
