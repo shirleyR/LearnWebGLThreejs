@@ -18,14 +18,21 @@
         // document.body.appendChild(container);
 
         scene = new THREE.Scene();
-        scene.add(new THREE.AmbientLight(0xccc));
+        // scene.add(new THREE.AmbientLight(0xccc));
         camera = new THREE.PerspectiveCamera(45, aspect, 1, 100);
         camera.position.z = 8;
         camera.position.x = 10;
         camera.position.y = 7;
         camera.lookAt(new THREE.Vector3(0, -0, 0));
 
-        var plane = new THREE.Mesh(new THREE.PlaneGeometry(8, 8, 16, 16), new THREE.MeshLambertMaterial({ color: 0x56772A }));
+        var loader = new THREE.TextureLoader();
+        loader.crossOrigin = '';
+
+        var plane = new THREE.Mesh(new THREE.PlaneGeometry(8, 8, 16, 16), new THREE.MeshLambertMaterial({
+                map: loader.load('land.jpg', function(){
+                    renderer.render (scene, camera);
+                })
+            }));
         plane.rotation.x = -Math.PI / 2;
         plane.position.y = -2;
         plane.receiveShadow = true;
@@ -40,17 +47,10 @@
 
         var materials = [];
         THREE.ImageUtils.crossOrigin = 'anonymous';
-        var loader = new THREE.TextureLoader();
-        loader.crossOrigin = '';
 
         for(var i = 0; i < 6; i++){
             materials.push(new THREE.MeshLambertMaterial({
-<<<<<<< Updated upstream
-                map: loader.load('image_1.jpg',
-=======
-                map: loader.load('./image_1.jpg',
->>>>>>> Stashed changes
-                {}, function(){
+                map: loader.load('image_1.jpg', function(){
                     renderer.render (scene, camera);
                 })
             }))
@@ -100,7 +100,7 @@
         // var light = new THREE.DirectionalLight(0xffff00, 1);
         light.position.set(-6, 10, 15);
         var AmbientLight = new THREE.AmbientLight(0x4E5E65);        //环境光
-    scene.add(AmbientLight);
+        scene.add(AmbientLight);
         light.target = mesh;
         light.castShadow = true;
         light.shadowCameraNear = 2;
