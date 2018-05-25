@@ -1,5 +1,5 @@
 # LearnWebGLThreejs
 
 
-![show](https://shirleyr.github.io/LearnWebGLThreejs/index.html)
+![demo](https://shirleyr.github.io/LearnWebGLThreejs/index.html)
 
