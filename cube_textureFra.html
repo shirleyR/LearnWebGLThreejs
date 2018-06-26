@@ -1,0 +1,290 @@
+<html>
+    <head>
+        <style>
+            canvas{
+                display: block;
+            }
+        </style>
+    
+</head>
+<body >
+    <canvas id="canvas" width="644px" height="644px" ></canvas>
+</body>
+        <script src="./readerShader.js"></script>
+        <script src="./glMatrix-0.9.5.min.js"></script>
+        <!-- Shader for 2D scene in the texture -->
+        <script type="x-shader/x-vertex" id="vshader-texture">
+            attribute vec2 a_coords;
+            void main(){
+                gl_Position = vec4(a_coords, 0, 1);
+            }
+        </script>
+        <script type="x-shader/x-fragment" id="fshader-texture">
+            precision mediump float;
+            uniform vec2 resolution;
+            uniform sampler2D texture;
+
+            void main(){
+                vec2 uv = gl_FragCoord.xy /resolution.xy;
+                gl_FragColor = texture2D(texture, uv);
+            }
+        </script>
+        <!--  Shader on-screen image  -->
+        <script  type="x-shader/x-vertex" id="vshader">
+            attribute vec3 aPosition;
+            varying vec3 dir;
+
+            vec3 ray00 = vec3(-1.0, -1.0, 0.0);
+            vec3 ray01 = vec3(1.0, -1.0, 0.0);
+            vec3 ray10 = vec3(-1.0, 1.0, 0.0);
+            vec3 ray11 = vec3(1.0, 1.0, 0.0);
+
+            vec3 eye = vec3(0.0, 0.0, 12.0);
+            void main(){
+                gl_Position = vec4(aPosition, 1.0);
+                vec2 percent = aPosition.xy * 0.5 + 0.5;
+                dir = mix(mix(ray00 - eye, ray01 -eye, percent.y), mix(ray10 - eye, ray11-eye, percent.y), percent.x);
+            }
+            
+        </script>
+        <script  type="x-shader/x-fragment" id="fshader">
+           precision mediump float;
+
+            varying vec3 dir;
+            uniform sampler2D texture;
+            vec3 eye = vec3(0.0, 0.0, 12.0);
+            vec3 roomCubeMax = vec3(1.0, 1.0, 1.0);
+            vec3 roomCubeMin = vec3(-1.0, -1.0, -1.0);
+            vec3 cubeMin = vec3(-0.25, -0.25, -0.25);
+            vec3 cubeMax = vec3(0.25, 0.25, 0.25);
+            float sphereRadius = 2.0;
+            vec3 sphereCenter = vec3(0.5, 0.5, 0.5);
+
+
+            vec2 intersectBox(vec3 origin, vec3 dir, vec3 bMin, vec3 bMax){
+                vec3 tMin = (bMin - origin)/ dir;
+                vec3 tMax = (bMax - origin)/dir;
+                vec3 t1 = min(tMin, tMax);
+                vec3 t2 = max(tMin, tMax);
+                float tNear = max(max(t1.x, t1.y), t1.z);
+                float tFar = min(min(t2.x, t2.y), t2.z);
+                return vec2(tNear, tFar);
+            }
+
+            float intersectSphere(vec3 origin, vec3 ray, vec3 spheresCenter, float sphereRadius){
+                vec3 toSphere = origin - spheresCenter;
+                float a = dot(ray, ray);
+                float b = 2.0 * dot(toSphere, ray);
+                float c = dot(toSphere, toSphere) - sphereRadius * sphereRadius;
+                float discriminant = b*b -4.0*a*c;
+                if(discriminant >0.0){
+                    float t = (-b -sqrt(discriminant))/(2.0*a);
+                    if(t>0.0) return t;
+                }
+                return 10000.0;
+            }
+
+            float randomR(vec3 scale, float seed) { 
+                return sin(dot(gl_FragCoord.xyz + seed, scale));
+            }
+
+            vec3 normalForCube(vec3 hit, vec3 cubeMin, vec3 cubeMax) {   
+                if(hit.x < cubeMin.x + 0.0001) return vec3(-1.0, 0.0, 0.0);  
+                 else if(hit.x > cubeMax.x - 0.0001) return vec3(1.0, 0.0, 0.0);   
+                 else if(hit.y < cubeMin.y + 0.0001) return vec3(0.0, -1.0, 0.0);   
+                 else if(hit.y > cubeMax.y - 0.0001) return vec3(0.0, 1.0, 0.0);   
+                 else if(hit.z < cubeMin.z + 0.0001) return vec3(0.0, 0.0, -1.0);   
+                 else return vec3(0.0, 0.0, 1.0);
+            } 
+
+            vec3 normalForSphere(vec3 hit, vec3 sphereCenter, float sphereRadius) {   
+                return (hit - sphereCenter) / sphereRadius; 
+            } 
+            vec3 cosineWeightedDirection(float seed, vec3 normal) {  
+                float u = randomR(vec3(12.9898, 78.233, 151.7182), seed);   
+                float v = randomR(vec3(63.7264, 10.873, 623.6736), seed);   
+                float r = sqrt(u);   
+                float angle = 6.283185307179586 * v;   
+                vec3 sdir, tdir;   
+                if (abs(normal.x)<.5) {     
+                    sdir = cross(normal, vec3(1,0,0));   
+                   } else {     
+                        sdir = cross(normal, vec3(0,1,0));   
+                   }   
+                tdir = cross(normal, sdir);   
+                return r*cos(angle)*sdir + r*sin(angle)*tdir + sqrt(1.-u)*normal; 
+           }
+
+            vec3 calculateColor (vec3 origin, vec3 ray, vec3 light){
+                vec3 colorMask = vec3(1.0);
+                vec3 accumulatedColor = vec3(1.0);
+                for(int bounce = 0; bounce < 4; bounce++){
+                    vec2 tRoom = intersectBox(origin, ray, roomCubeMin, roomCubeMax);
+                    vec2 tCube = intersectBox(origin, ray, cubeMin, cubeMax);
+                    float tSphere = intersectSphere(origin, ray, sphereCenter, sphereRadius);
+                    float t = 10000.0;
+                    if(tRoom.x < tRoom.y) t = tRoom.y;
+                    if(tCube.x > 0.0 && tCube.x < tCube.y && tCube.x < t){
+                        t = tCube.x;
+                    }
+                    if(tSphere < t) t= tSphere;
+
+                    vec3 hit = origin + ray * t;
+
+                    vec3 surfaceColor = vec3(0.75);
+                    float specularHighLight = 0.0;
+                    vec3 normal;
+                    if(t == tRoom.y){
+                        //
+                        normal = -normalForCube(hit, roomCubeMin, roomCubeMax);
+                        if(hit.x < -0.9999) 
+                            surfaceColor = vec3(0.1, 0.5, 1.0);
+                        else if(hit.x > 0.9999) 
+                            surfaceColor = vec3(1.0, 0.9, 0.1);
+                        ray = cosineWeightedDirection(float(bounce), normal);
+                    } else if( t == 10000.0)  break;
+                    else  {
+                        if(t == tCube.x && tCube.x < tCube.y){
+                            normal = normalForCube(hit, cubeMin, cubeMax);
+                        } else if(t == tSphere){
+                            normalForSphere(hit, sphereCenter, sphereRadius);
+                        }
+                            ray = cosineWeightedDirection(float(bounce), normal);
+                    }
+
+                    vec3 toLight = light - hit;
+                    float diffuse = max(0.0, dot(normalize(toLight), normal));
+                    colorMask *= surfaceColor;
+                    accumulatedColor += colorMask * 0.5 * diffuse;
+                    origin = hit;
+                }
+                return accumulatedColor;
+            }
+
+            void main(){
+                vec4 v_color = vec4(calculateColor(eye, dir, dir + 0.001), 1.0);
+                gl_FragColor = v_color;
+            }
+
+
+
+
+        </script>
+        <script>
+            var gl, canvas, prog, a_coords_loc, a_normal_loc, a_texCoords_loc, u_projection,
+                u_modelview, u_texture, u_normalMatrix, u_textureScale;
+                var prog_texture;
+            function draw(){
+                // Draw the 2D image of moving disks into a texture that has beeen
+                // attached to a framebuffer as its color buffer
+                gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+                gl.useProgram(prog_texture);
+                
+                gl.clearColor(1, 1, 1, 1);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+
+                // Essential to turn off depth test 
+                // since framebuffer doesn't even have a depth buffer
+                // need to set the viewport to match size of the texture
+                // It is not set automatically
+                // Use transparency while drawing 2D image
+                gl.disable(gl.DEPTH_TEST);
+                gl.viewport(0,0, 512, 512);
+
+                gl.enable(gl.BLEND);
+                gl.bindBuffer(gl.ARRAY_BUFFER, buffer_texture);
+                gl.vertexAttribPointer(a_coords_loc_texture, 2, gl.FLOAT, false, 0, 0);
+                gl.enableVertexAttribArray(a_coords_loc_texture);
+                // personal like??
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+                gl.disableVertexAttribArray(a_coords_loc_texture);
+                gl.disable(gl.BLEND);
+                // draw an object using the texture that we just draw
+                // texture object was created and bound in initGL();
+
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                gl.useProgram(prog);
+                gl.clearColor(0,0,0,1);
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+                gl.enable(gl.DEPTH_TEST);
+                gl.viewport(0, 0, canvas.width, canvas.height);
+
+                gl.vertexAttribPointer(a_coords_loc, 2, gl.FLOAT, false, 0, 0);
+                gl.enableVertexAttribArray(a_coords_loc);
+                gl.uniform1i(u_texture, 0);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+            }
+            
+
+            function initGL(){
+                gl = document.getElementById("canvas").getContext("webgl");
+                canvas = {};
+                canvas.width = 512;
+                canvas.height = 512;
+
+                // initialize data for the 2D image that is drawn to the texture
+                var vtextureShader = getShader(gl, "vshader-texture");
+                var ftextureShader = getShader(gl, "fshader-texture");
+                var prog_texture = gl.createProgram();
+                gl.attachShader(prog_texture, vtextureShader);
+                gl.attachShader(prog_texture, ftextureShader);
+                gl.linkProgram(prog_texture);
+                gl.useProgram(prog_texture);
+                
+                a_coords_loc_texture = gl.getAttribLocation(prog_texture, "a_coords");
+                gl.enableVertexAttribArray(a_coords_loc_texture);
+
+                // *** a texture *****************
+
+                buffer_texture = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, buffer_texture);
+                gl.vertexAttribPointer(a_coords_loc_texture, 2, gl.FLOAT, false, 0, 0);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([ - 1.0, - 1.0, 1.0, - 1.0, - 1.0, 1.0, 1.0, - 1.0, 1.0, 1.0, - 1.0, 1.0 ] ), gl.STATIC_DRAW )
+
+
+                // initialize data for the main on-screen scene
+                // vshader and fshader
+                var vShader = getShader(gl, "vshader");
+                var fShader = getShader(gl, "fshader");
+                var prog = gl.createProgram();
+                gl.attachShader(prog, vShader);
+                gl.attachShader(prog, fShader);
+                gl.linkProgram(prog);
+                gl.useProgram(prog);
+
+                a_coords_loc = gl.getAttribLocation(prog, "aPosition");
+                surfaceBuffer = gl.createBuffer();
+                gl.vertexAttribPointer(a_coords_loc, 2, gl.FLOAT, false, 0, 0);
+                gl.enableVertexAttribArray(a_coords_loc);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, surfaceBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([ -.5, - .5, .5, - .5, - 1.0, 1.0, 1.0, - 1.0, 1.0, 1.0, - 1.0, 1.0 ] ), gl.STATIC_DRAW )
+
+                u_texture = gl.getUniformLocation(prog, "texture");
+
+                gl.uniform1i(u_texture, 0);
+               
+                texture = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 512, 512, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
+
+                framebuffer = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+            }
+            initGL();
+            draw();
+    function animate() {
+        requestAnimationFrame( animate );
+        draw();
+    }
+        </script>
+    
+</html>
